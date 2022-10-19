@@ -1,0 +1,13 @@
+
+module.exports =
+{
+    mutation: `createUniqueSession(name: String!, isVersionA: Boolean!): JSON`,
+    resolver: {
+        Mutation: {
+            createUniqueSession: {
+                description: 'Create a unique session',
+                resolver: 'session.createUniqueSession'
+            }
+        }
+    }
+};

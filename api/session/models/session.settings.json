@@ -1,0 +1,56 @@
+{
+  "kind": "collectionType",
+  "collectionName": "sessions",
+  "info": {
+    "name": "Session",
+    "description": ""
+  },
+  "options": {
+    "increments": true,
+    "timestamps": true,
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "uuid": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "name": {
+      "type": "string"
+    },
+    "animator": {
+      "plugin": "users-permissions",
+      "model": "user"
+    },
+    "isSessionStarted": {
+      "type": "boolean",
+      "required": true,
+      "default": false
+    },
+    "isGameStarted": {
+      "type": "boolean",
+      "default": false
+    },
+    "isGameCompleted": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    },
+    "gameStartTime": {
+      "type": "datetime"
+    },
+    "score": {
+      "type": "integer"
+    },
+    "rates": {
+      "collection": "rate",
+      "via": "session"
+    },
+    "isVersionA": {
+      "type": "boolean",
+      "default": true,
+      "required": true
+    }
+  }
+}

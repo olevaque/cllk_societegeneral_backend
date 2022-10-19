@@ -1,0 +1,25 @@
+{
+  "kind": "collectionType",
+  "collectionName": "rates",
+  "info": {
+    "name": "rate",
+    "description": ""
+  },
+  "options": {
+    "increments": true,
+    "timestamps": true,
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "stars": {
+      "type": "integer"
+    },
+    "comment": {
+      "type": "text"
+    },
+    "session": {
+      "via": "rates",
+      "model": "session"
+    }
+  }
+}
