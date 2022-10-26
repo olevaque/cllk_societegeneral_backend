@@ -22,15 +22,13 @@ module.exports =
             {
                 uuid: uuid,
                 name: mData.name,
-                score: 0,
                 animator: ctx.state.user.id,
-
-                sessionDate: mData.sessionDate,
 
                 isSessionStarted: false,
                 isGameStarted: false,
                 isGameCompleted: false,
                 
+                currentScene: 1,
                 isVersionA: mData.isVersionA
             }
             return await strapi.query("session").create(sessionDef);

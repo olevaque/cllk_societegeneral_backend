@@ -40,9 +40,6 @@
     "gameStartTime": {
       "type": "datetime"
     },
-    "score": {
-      "type": "integer"
-    },
     "rates": {
       "collection": "rate",
       "via": "session"
@@ -51,6 +48,11 @@
       "type": "boolean",
       "default": true,
       "required": true
+    },
+    "currentScene": {
+      "type": "integer",
+      "default": 0,
+      "required": false
     }
   }
 }
