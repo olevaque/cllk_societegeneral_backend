@@ -12,7 +12,7 @@
 
 module.exports = () =>
 {
-    const GAME_DURATION_MINUTES = 20;
+    const GAME_DURATION_MINUTES = 30;
     const VOTE_DURATION_SECONDS = 30;
 
     const SCENE_JOINROOM = 0;
@@ -67,7 +67,7 @@ module.exports = () =>
                         socket.room = data.uuid;
                         socket.ready = true;
     
-                        joinRoom(sessionExist.uuid, socket.id, pseudo, sessionExist.currentScene, sessionExist.gameStartTime);
+                        joinRoom(sessionExist.uuid, socket.id, sessionExist.isVersionA, pseudo, sessionExist.currentScene, sessionExist.gameStartTime);
     
                         socket.join(sessionExist.uuid); // Le uuid unique est utilisé en tant que Room
                         socket.emit("infoSession", { status: "OK", info: "OK", currentScene: sessionExist.currentScene });
@@ -89,7 +89,7 @@ module.exports = () =>
             if (socket.ready)
             {
                 // Clean les votes et sauvegarde le vote du joueur qui propose
-                startNewVote(socket.room, true);
+                startNewVote(socket.room, null);
                 userVote(socket.room, socket.id, true);
     
                 // Envoi a tout le monde sauf celui qui propose
@@ -106,7 +106,7 @@ module.exports = () =>
             if (socket.ready)
             {
                 // Clean les votes et sauvegarde le vote du joueur qui propose
-                startNewVote(socket.room, true);
+                startNewVote(socket.room, data.captain);
                 userVote(socket.room, socket.id, true);
     
                 // Envoi a tout le monde sauf celui qui propose
@@ -118,12 +118,67 @@ module.exports = () =>
             }
         });
 
-        socket.on("WGCC_ProposeBngSliders", async(data) =>
+        socket.on("WGCC_CaptainChangeInfo", async(data) =>
         {
             if (socket.ready)
             {
                 // Envoi a tout le monde sauf celui qui propose
-                socket.to(socket.room).emit('WGCC_ShareBngSliders', data);
+                socket.to(socket.room).emit('WGCC_CaptainShareInfo', data);
+            }
+            else
+            {
+                console.log("WGVC_Propose: Socket not ready.");
+            }
+        });
+
+        socket.on("WGCC_CaptainProposePass", async(data) =>
+        {
+            if (socket.ready)
+            {
+                if (data.password == "pass")
+                {
+                    io.to(socket.room).emit('WGCC_CaptainShareGoodPass', data.password);
+                }
+                else
+                {
+                    io.to(socket.room).emit('WGCC_CaptainShareBadPass', data.password);
+                }
+            }
+            else
+            {
+                console.log("WGVC_Propose: Socket not ready.");
+            }
+        });
+
+        socket.on("WGCC_CaptainProposeCode", async(data) =>
+        {
+            if (socket.ready)
+            {
+                if (data.code == "code")
+                {
+                    io.to(socket.room).emit('WGCC_CaptainShareGoodCode', data.code);
+                }
+                else
+                {
+                    io.to(socket.room).emit('WGCC_CaptainShareBadCode', data.code);
+                }
+            }
+            else
+            {
+                console.log("WGVC_Propose: Socket not ready.");
+            }
+        });
+
+        socket.on("WGCC_Propose", async(data) =>
+        {
+            if (socket.ready)
+            {
+                // Clean les votes et sauvegarde le vote du joueur qui propose
+                startNewVote(socket.room, true);
+                userVote(socket.room, socket.id, true);
+
+                // Envoi a tout le monde sauf celui qui propose
+                socket.to(socket.room).emit('WGCC_ShareVote', data);
             }
             else
             {
@@ -155,6 +210,18 @@ module.exports = () =>
             }
         });
 
+        socket.on("requestCurrentCaptain", async(data) =>
+        {
+            if (socket.ready)
+            {
+                shareCurrentCaptain(socket.room, socket.id);
+            }
+            else
+            {
+                console.log("requestCurrentCaptain: Socket not ready.");
+            }
+        });
+
         socket.on("disconnect", async(data) =>
         {
             strapi.log.info("SocketDisconnected: ", socket.id);
@@ -170,7 +237,7 @@ module.exports = () =>
     });
 
     // Reinitialise et démarre un nouveau vote
-    function startNewVote(room, propositionIsGood)
+    function startNewVote(room, dataForVote)
     {
         let emptyVote = [];
         roomList.get(room).players.forEach(p =>
@@ -182,7 +249,7 @@ module.exports = () =>
         roomInfo.currentVote = 
         {
             userVotes: emptyVote, 
-            propositionIsGoodAnswer: propositionIsGood,
+            voteData: dataForVote,
             voteStartTime: new Date(),
         };
         roomList.set(room, roomInfo);
@@ -226,21 +293,35 @@ module.exports = () =>
                 // SCENE_READMISSION 
                 if (roomList.get(room).currentScene == SCENE_READMISSION)
                 {
-                    let nextScene = SCENE_VOTECAPTAIN;
-                    strapi.query("session").update({ uuid: room }, { currentScene: nextScene }).then((sessionUpdated) => 
+                    roomList.get(room).currentScene = sessionUpdated.currentScene;
+
+                    strapi.query("session").update({ uuid: room }, { currentScene: SCENE_VOTECAPTAIN }).then((sessionUpdated) => 
                     {
-                        roomList.get(room).currentScene = nextScene;
-                        io.to(room).emit('WG_NextScene', { nextScene: nextScene });
+                        io.to(room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
                     });
                 }
                 // SCENE_VOTECAPTAIN
                 else if (roomList.get(room).currentScene == SCENE_VOTECAPTAIN)
                 {
-                    let nextScene = SCENE_CHOOSECOMPANY;
-                    strapi.query("session").update({ uuid: room }, { currentScene: nextScene }).then((sessionUpdated) => 
+                    roomList.get(room).gameStartTime = sessionUpdated.gameStartTime;
+                    roomList.get(room).currentScene = sessionUpdated.currentScene;
+                    roomList.get(room).currentCaptain = roomList.get(room).currentVote.voteData;
+
+                    strapi.query("session").update({ uuid: room }, { currentScene: SCENE_CHOOSECOMPANY, gameStartTime: new Date() }).then((sessionUpdated) => 
                     {
-                        roomList.get(room).currentScene = nextScene;
-                        io.to(room).emit('WG_NextScene', { nextScene: nextScene });
+                        io.to(room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
+                    });
+                }
+                // SCENE_CHOOSECOMPANY
+                else if (roomList.get(room).currentScene == SCENE_CHOOSECOMPANY)
+                {
+                    // Send report
+                    //...
+
+                    // Review
+                    strapi.query("session").update({ uuid: room }, { currentScene: SCENE_CONGRATULATION }).then((sessionUpdated) => 
+                    {
+                        io.to(room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
                     });
                 }
             }
@@ -259,7 +340,7 @@ module.exports = () =>
     }
 
     // Rejoins une room (la créer si elle n'existe pas)
-    function joinRoom(room, socketid, pseudo, currentScene, sessionStartTime)
+    function joinRoom(room, socketid, isVA, pseudo, currentScene, sessionStartTime)
     {
         const newPlayer =
         {
@@ -273,11 +354,19 @@ module.exports = () =>
             console.log(pseudo + " createdRoom: " + room);
 
             roomList.set(room, { 
+                isVersionA: isVA,
                 players: [],
                 currentScene: currentScene,
-                gameStartTime: sessionStartTime,
-                currentVote: null
+                currentCaptain: null,
+                currentVote: null,
+                gameStartTime: sessionStartTime
             });
+
+            // Si la room existant
+            if (currentScene >= SCENE_CHOOSECOMPANY)
+            {
+                roomList.get(room).currentCaptain = newPlayer;
+            }
         }
         else
         {
@@ -315,10 +404,18 @@ module.exports = () =>
         {
             console.log(socketId + " leftRoom: " + room + ". PlayersRemaining: " + playerList);
 
+            // Si le captain a quitté, on sélectionne le captain suivant (premier joueur de la liste)
+            if (roomList.get(room).currentCaptain !== null && roomList.get(room).currentCaptain.psckId === socketId)
+            {
+                roomList.get(room).currentCaptain = playerList[0];
+                playerList.forEach(p =>
+                {
+                    shareCurrentCaptain(room, p.psckId);
+                });
+            }
+
             // Met a jour la room avec l'utilisateur ayant quitté en moins
-            var roomInfo = roomList.get(room);
-            roomInfo.players = playerList;
-            roomList.set(room, roomInfo);
+            roomList.get(room).players = playerList;
 
             shareConnectedPlayers(room);
         }
@@ -330,6 +427,13 @@ module.exports = () =>
         io.to(room).emit('connectedPlayers', { players: roomList.get(room).players });
     }
 
+    // Envoi l'information du captain au socket qui le demande
+    function shareCurrentCaptain(room, socketId)
+    {
+        let yac = roomList.get(room).currentCaptain.psckId === socketId;
+        io.to(socketId).emit('currentCaptain', { captain: roomList.get(room).currentCaptain, youAreCaptain: yac });
+    }
+
     //********************************************************/
     // Timers
     setInterval(function()
@@ -337,10 +441,10 @@ module.exports = () =>
         roomList.forEach((values, room) =>
         {
             // Pour les rooms en cours de jeu
-            if (values.currentScene >= SCENE_READMISSION && values.currentScene <= SCENE_CONGRATULATION)
+            if (values.currentScene == SCENE_CHOOSECOMPANY)
             {
                 // Temps de jeu écoulé et déclenchement du ending
-                /*const gameLimitTimeMs = new Date(values.gameStartTime);
+                const gameLimitTimeMs = new Date(values.gameStartTime);
                 gameLimitTimeMs.setMinutes(gameLimitTimeMs.getMinutes() + GAME_DURATION_MINUTES);
 
                 const gameMs = gameLimitTimeMs - new Date();
@@ -349,45 +453,45 @@ module.exports = () =>
 
                 if (gameMinutes < 0 && gameSeconds < 0)
                 {
-                    let nextScene = SCENE_CONGRATULATION;
+                    /*let nextScene = SCENE_CONGRATULATION;
                     strapi.query("session").update({ uuid: room }, { currentScene: nextScene }).then((sessionUpdated) => 
                     {
                         roomList.get(room).currentScene = nextScene;
                         io.to(room).emit('WG_NextScene', nextScene);
-                    });
+                    });*/
                 }
                 else
                 {
                     //console.log("UpdateTimerRoom: " + gameMinutes + ":" + gameSeconds);
-                    io.to(room).emit("updateTimerGame", { minutes: gameMinutes, seconds: gameSeconds });
-                }*/
+                    io.to(room).emit("UpdateTimerGame", { minutes: gameMinutes, seconds: gameSeconds });
+                }
+            }
 
-                // Temps de vote écoulé
-                if (values.currentVote !== null)
+            // Vote en cours : Temps de vote écoulé
+            if (values.currentVote !== null)
+            {
+                const voteLimitTimeMs = new Date(values.currentVote.voteStartTime);
+                voteLimitTimeMs.setSeconds(voteLimitTimeMs.getSeconds() + VOTE_DURATION_SECONDS);
+
+                const voteSeconds = Math.floor((voteLimitTimeMs - new Date()) / 1000);
+                if (voteSeconds < 0)
                 {
-                    const voteLimitTimeMs = new Date(values.currentVote.voteStartTime);
-                    voteLimitTimeMs.setSeconds(voteLimitTimeMs.getSeconds() + VOTE_DURATION_SECONDS);
-
-                    const voteSeconds = Math.floor((voteLimitTimeMs - new Date()) / 1000);
-                    if (voteSeconds < 0)
+                    // Force la fin du vote en mettant les personnes qui n'ont pas votés à "votés et acceptés"
+                    let userVotes = roomList.get(room).currentVote.userVotes;
+                    for (let i=0; i<userVotes.length; i++)
                     {
-                        // Force la fin du vote en mettant les personnes qui n'ont pas votés à "votés et acceptés"
-                        let userVotes = roomList.get(room).currentVote.userVotes;
-                        for (let i=0; i<userVotes.length; i++)
+                        if (userVotes[i].vote === NO_VOTE)
                         {
-                            if (userVotes[i].vote === NO_VOTE)
-                            {
-                                userVotes[i].vote = VOTE_AGREE;
-                            }
-                        };
-                        roomList.get(room).currentVote.userVotes = userVotes;
+                            userVotes[i].vote = VOTE_AGREE;
+                        }
+                    };
+                    roomList.get(room).currentVote.userVotes = userVotes;
 
-                        checkVote(room);
-                    }
-                    else
-                    {
-                        io.to(room).emit("MX_VoteTimerUpdate", { seconds: voteSeconds });
-                    }
+                    checkVote(room);
+                }
+                else
+                {
+                    io.to(room).emit("MX_VoteTimerUpdate", { seconds: voteSeconds });
                 }
             }
         });
