@@ -222,6 +222,15 @@ module.exports = () =>
             }
         });
 
+        socket.on("requestSessionName", async(data) => 
+        {
+            const sessionExist = await strapi.query("session").findOne({ uuid: data.uuid });
+            if (sessionExist)
+            {
+                socket.emit("nameSession", { name: sessionExist.name });
+            }
+        });
+
         socket.on("disconnect", async(data) =>
         {
             strapi.log.info("SocketDisconnected: ", socket.id);
