@@ -12,7 +12,9 @@
 
 module.exports = () =>
 {
-    const GAME_DURATION_MINUTES = 30;
+    const GAME_DURATION_P1_SECONDS = 2400;
+    const GAME_DURATION_P2_SECONDS = 90;
+    const BRAINTEASER_DURATION_SECONDS = 90;
     const VOTE_DURATION_SECONDS = 30;
 
     const SCENE_JOINROOM = 0;
@@ -20,6 +22,13 @@ module.exports = () =>
     const SCENE_VOTECAPTAIN = 2;
     const SCENE_CHOOSECOMPANY = 3;
     const SCENE_CONGRATULATION = 4;
+
+    const STEP_PASSWORD = 0;
+    const STEP_CODE = 1;
+    const STEP_PRINCIPAL_MISSION = 2;
+    const STEP_BRAINTEASER = 3;
+    const STEP_TRANSVERSAL_MISSION = 4;
+    const STEP_FINAL_CHOOSE = 5;
 
     const NO_VOTE = "no-vote";
     const VOTE_AGREE = "vote-agree";
@@ -66,11 +75,14 @@ module.exports = () =>
                     {
                         socket.room = data.uuid;
                         socket.ready = true;
+                        socket.isVersionA = sessionExist.isVersionA;
     
-                        joinRoom(sessionExist.uuid, socket.id, sessionExist.isVersionA, pseudo, sessionExist.currentScene, sessionExist.gameStartTime);
+                        joinRoom(sessionExist.uuid, socket.id, sessionExist.isVersionA, pseudo, 
+                                sessionExist.currentScene, sessionExist.currentStep, 
+                                sessionExist.gameStartTime, sessionExist.gameFinalTime);
     
                         socket.join(sessionExist.uuid); // Le uuid unique est utilisé en tant que Room
-                        socket.emit("infoSession", { status: "OK", info: "OK", currentScene: sessionExist.currentScene });
+                        socket.emit("infoSession", { status: "OK", info: "OK", currentScene: sessionExist.currentScene, currentStep: sessionExist.currentStep, isVersionA: sessionExist.isVersionA });
                     }
                 }
                 else
@@ -135,13 +147,16 @@ module.exports = () =>
         {
             if (socket.ready)
             {
-                if (data.password == "pass")
+                if ((data.password == "Y5rd6C12m" && socket.isVersionA) || (data.password == "Z6se7D23n" && !socket.isVersionA) )
                 {
-                    io.to(socket.room).emit('WGCC_CaptainShareGoodPass', data.password);
+                    let sessionUpdated = await strapi.query("session").update({ uuid: socket.room }, { currentStep: STEP_CODE });
+                    roomList.get(socket.room).currentStep = sessionUpdated.currentStep;
+
+                    io.to(socket.room).emit('WG_NextStep', { nextStep: sessionUpdated.currentStep });
                 }
                 else
                 {
-                    io.to(socket.room).emit('WGCC_CaptainShareBadPass', data.password);
+                    io.to(socket.room).emit('WGCC_CaptainShareBadPass');
                 }
             }
             else
@@ -154,13 +169,16 @@ module.exports = () =>
         {
             if (socket.ready)
             {
-                if (data.code == "code")
+                if (data.code == "111221")
                 {
-                    io.to(socket.room).emit('WGCC_CaptainShareGoodCode', data.code);
+                    let sessionUpdated = await strapi.query("session").update({ uuid: socket.room }, { currentStep: STEP_PRINCIPAL_MISSION });
+                    roomList.get(socket.room).currentStep = sessionUpdated.currentStep;
+
+                    io.to(socket.room).emit('WG_NextStep', { nextStep: sessionUpdated.currentStep });
                 }
                 else
                 {
-                    io.to(socket.room).emit('WGCC_CaptainShareBadCode', data.code);
+                    io.to(socket.room).emit('WGCC_CaptainShareBadCode');
                 }
             }
             else
@@ -169,7 +187,7 @@ module.exports = () =>
             }
         });
 
-        socket.on("WGCC_Propose", async(data) =>
+        socket.on("WGCC_CaptainProposeSendReport", async(data) =>
         {
             if (socket.ready)
             {
@@ -178,7 +196,22 @@ module.exports = () =>
                 userVote(socket.room, socket.id, true);
 
                 // Envoi a tout le monde sauf celui qui propose
-                socket.to(socket.room).emit('WGCC_ShareVote', data);
+                socket.to(socket.room).emit('WGCC_CaptainShareSendReport', data);
+            }
+            else
+            {
+                console.log("WGVC_Propose: Socket not ready.");
+            }
+        });
+
+        socket.on("WGCC_CaptainProposeFinalChoose", async(data) =>
+        {
+            if (socket.ready)
+            {
+                let sessionUpdated = await strapi.query("session").update({ uuid: socket.room }, { currentScene: SCENE_CONGRATULATION });
+
+                roomList.get(socket.room).currentScene = sessionUpdated.currentScene;
+                io.to(socket.room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
             }
             else
             {
@@ -222,12 +255,37 @@ module.exports = () =>
             }
         });
 
+        socket.on("requestCurrentStep", async(data) =>
+        {
+            if (socket.ready)
+            {
+                const sessionExist = await strapi.query("session").findOne({ uuid: socket.room });
+                if (sessionExist)
+                {
+                    socket.emit('WG_NextStep', { nextStep: sessionExist.currentStep });
+                }
+            }
+            else
+            {
+                console.log("requestCurrentStep: Socket not ready.");
+            }
+        });
+
         socket.on("requestSessionName", async(data) => 
         {
             const sessionExist = await strapi.query("session").findOne({ uuid: data.uuid });
             if (sessionExist)
             {
                 socket.emit("nameSession", { name: sessionExist.name });
+            }
+        });
+
+        socket.on("requestSpectator", async(data) => 
+        {
+            const sessionExist = await strapi.query("session").findOne({ uuid: data.uuid });
+            if (sessionExist)
+            {
+                //socket.emit("spectatorData", { name: sessionExist.name });
             }
         });
 
@@ -281,7 +339,7 @@ module.exports = () =>
         }
     }
 
-    function checkVote(room)
+    async function checkVote(room)
     {
         // Compte le résultat du vote
         let voteNull = 0;
@@ -302,36 +360,40 @@ module.exports = () =>
                 // SCENE_READMISSION 
                 if (roomList.get(room).currentScene == SCENE_READMISSION)
                 {
+                    let sessionUpdated = await strapi.query("session").update({ uuid: room }, { currentScene: SCENE_VOTECAPTAIN });
+                    
                     roomList.get(room).currentScene = sessionUpdated.currentScene;
-
-                    strapi.query("session").update({ uuid: room }, { currentScene: SCENE_VOTECAPTAIN }).then((sessionUpdated) => 
-                    {
-                        io.to(room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
-                    });
+                    io.to(room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
                 }
                 // SCENE_VOTECAPTAIN
                 else if (roomList.get(room).currentScene == SCENE_VOTECAPTAIN)
                 {
+                    let sessionUpdated = await strapi.query("session").update({ uuid: room }, { currentScene: SCENE_CHOOSECOMPANY, gameStartTime: new Date() });
+                    
                     roomList.get(room).gameStartTime = sessionUpdated.gameStartTime;
                     roomList.get(room).currentScene = sessionUpdated.currentScene;
                     roomList.get(room).currentCaptain = roomList.get(room).currentVote.voteData;
-
-                    strapi.query("session").update({ uuid: room }, { currentScene: SCENE_CHOOSECOMPANY, gameStartTime: new Date() }).then((sessionUpdated) => 
-                    {
-                        io.to(room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
-                    });
+                    io.to(room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
                 }
                 // SCENE_CHOOSECOMPANY
                 else if (roomList.get(room).currentScene == SCENE_CHOOSECOMPANY)
                 {
-                    // Send report
-                    //...
-
-                    // Review
-                    strapi.query("session").update({ uuid: room }, { currentScene: SCENE_CONGRATULATION }).then((sessionUpdated) => 
+                    if (roomList.get(room).currentStep = STEP_PRINCIPAL_MISSION)
                     {
+                        // Send report
+                        let sessionUpdated = await strapi.query("session").update({ uuid: room }, { currentStep: STEP_FINAL_CHOOSE, gameFinalTime: new Date() });
+
+                        roomList.get(room).gameFinalTime = sessionUpdated.gameFinalTime;
+                        roomList.get(room).currentStep = sessionUpdated.currentStep;
+                        io.to(room).emit('WG_NextStep', { nextStep: sessionUpdated.currentStep });
+                    }
+                    else
+                    {
+                        // Review
+                        let sessionUpdated = await strapi.query("session").update({ uuid: room }, { currentScene: SCENE_CONGRATULATION });
+                        roomList.get(room).currentScene = sessionUpdated.currentScene;
                         io.to(room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
-                    });
+                    }
                 }
             }
             else
@@ -349,7 +411,7 @@ module.exports = () =>
     }
 
     // Rejoins une room (la créer si elle n'existe pas)
-    function joinRoom(room, socketid, isVA, pseudo, currentScene, sessionStartTime)
+    function joinRoom(room, socketid, isVA, pseudo, currentScene, currentStep, sessionStartTime, sessionFinalTime)
     {
         const newPlayer =
         {
@@ -366,9 +428,11 @@ module.exports = () =>
                 isVersionA: isVA,
                 players: [],
                 currentScene: currentScene,
+                currentStep: currentStep,
                 currentCaptain: null,
                 currentVote: null,
-                gameStartTime: sessionStartTime
+                gameStartTime: sessionStartTime,
+                gameFinalTime: sessionFinalTime
             });
 
             // Si la room existant
@@ -447,14 +511,22 @@ module.exports = () =>
     // Timers
     setInterval(function()
     {
-        roomList.forEach((values, room) =>
+        roomList.forEach(async (values, room) =>
         {
             // Pour les rooms en cours de jeu
             if (values.currentScene == SCENE_CHOOSECOMPANY)
             {
-                // Temps de jeu écoulé et déclenchement du ending
-                const gameLimitTimeMs = new Date(values.gameStartTime);
-                gameLimitTimeMs.setMinutes(gameLimitTimeMs.getMinutes() + GAME_DURATION_MINUTES);
+                let gameLimitTimeMs;
+                if (values.currentStep <= STEP_PRINCIPAL_MISSION)
+                {
+                    gameLimitTimeMs = new Date(values.gameStartTime);
+                    gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P1_SECONDS);
+                }
+                else if (values.currentStep == STEP_FINAL_CHOOSE)
+                {
+                    gameLimitTimeMs = new Date(values.gameFinalTime);
+                    gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P2_SECONDS);
+                }
 
                 const gameMs = gameLimitTimeMs - new Date();
                 const gameSeconds = Math.floor((gameMs / 1000) % 60);
@@ -462,16 +534,25 @@ module.exports = () =>
 
                 if (gameMinutes < 0 && gameSeconds < 0)
                 {
-                    /*let nextScene = SCENE_CONGRATULATION;
-                    strapi.query("session").update({ uuid: room }, { currentScene: nextScene }).then((sessionUpdated) => 
+                    if (values.currentStep <= STEP_PRINCIPAL_MISSION)
                     {
-                        roomList.get(room).currentScene = nextScene;
-                        io.to(room).emit('WG_NextScene', nextScene);
-                    });*/
+                        // Send report
+                        let sessionUpdated = await strapi.query("session").update({ uuid: room }, { currentStep: STEP_FINAL_CHOOSE, gameFinalTime: new Date() });
+
+                        roomList.get(room).gameFinalTime = sessionUpdated.gameFinalTime;
+                        roomList.get(room).currentStep = sessionUpdated.currentStep;
+                        io.to(room).emit('WG_NextStep', { nextStep: sessionUpdated.currentStep });
+                    }
+                    else if (values.currentStep == STEP_FINAL_CHOOSE)
+                    {
+                        let sessionUpdated = await strapi.query("session").update({ uuid: room }, { currentScene: SCENE_CONGRATULATION });
+
+                        roomList.get(room).currentScene = sessionUpdated.currentScene;
+                        io.to(room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
+                    }
                 }
                 else
                 {
-                    //console.log("UpdateTimerRoom: " + gameMinutes + ":" + gameSeconds);
                     io.to(room).emit("UpdateTimerGame", { minutes: gameMinutes, seconds: gameSeconds });
                 }
             }

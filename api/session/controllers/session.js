@@ -29,6 +29,7 @@ module.exports =
                 isGameCompleted: false,
                 
                 currentScene: 1,
+                currentStep: 0,
                 isVersionA: mData.isVersionA
             }
             return await strapi.query("session").create(sessionDef);

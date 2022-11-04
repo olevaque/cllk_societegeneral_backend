@@ -53,6 +53,14 @@
       "type": "integer",
       "default": 0,
       "required": false
+    },
+    "currentStep": {
+      "type": "integer",
+      "default": 0,
+      "required": true
+    },
+    "gameFinalTime": {
+      "type": "datetime"
     }
   }
 }
