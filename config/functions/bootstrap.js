@@ -187,6 +187,28 @@ module.exports = () =>
             }
         });
 
+        socket.on("WGCC_CaptainProposeBrainteaser", async(data) =>
+        {
+            if (socket.ready)
+            {
+                if ((data.questionId == 0 && data.answer == "tuesday") || 
+                    (data.questionId == 1 && data.answer == "4") ||
+                    (data.questionId == 2 && data.answer == "7") || 
+                    (data.questionId == 3 && data.answer == "10"))
+                {
+                    io.to(socket.room).emit('WGCC_CaptainShareGoodBrainteaser');
+                }
+                else
+                {
+                    io.to(socket.room).emit('WGCC_CaptainShareBadBrainteaser');
+                }
+            }
+            else
+            {
+                console.log("WGCC_CaptainProposeBrainteaser: Socket not ready.");
+            }
+        });
+        
         socket.on("WGCC_CaptainProposeSendReport", async(data) =>
         {
             if (socket.ready)
@@ -285,7 +307,13 @@ module.exports = () =>
             const sessionExist = await strapi.query("session").findOne({ uuid: data.uuid });
             if (sessionExist)
             {
-                //socket.emit("spectatorData", { name: sessionExist.name });
+                socket.emit("spectatorInfo",
+                { 
+                    isVersionA: sessionExist.isVersionA, 
+                    name: sessionExist.name, 
+                    currentScene: sessionExist.currentScene, 
+                    currentStep: sessionExist.currentStep
+                });
             }
         });
 
