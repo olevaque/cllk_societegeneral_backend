@@ -241,6 +241,49 @@ module.exports = () =>
             }
         });
 
+        socket.on("WGCC_OpenDocument", async(data) =>
+        {
+            if (socket.ready)
+            {                
+                var player = roomList.get(socket.room).players.find(p => p.psckId === socket.id);
+                var docFound = player.docViewed.find(dv => dv.name === "X" + data.docName.substr(1));
+                if (docFound)
+                {
+                    docFound.nbOpen++;
+                    docFound.isOpen = true;
+                }
+                else
+                {
+                    console.log("Doc: " + "X" + data.docName.substr(1) + " doesn't exist");
+                }
+            }
+            else
+            {
+                console.log("WGCC_OpenDocument: Socket not ready.");
+            }
+        });
+
+        socket.on("WGCC_CloseDocument", async(data) =>
+        {
+            if (socket.ready)
+            {
+                var player = roomList.get(socket.room).players.find(p => p.psckId === socket.id);
+                var docFound = player.docViewed.find(dv => dv.name === "X" + data.docName.substr(1));
+                if (docFound)
+                {
+                    docFound.isOpen = false;
+                }
+                else
+                {
+                    console.log("Doc: " + "X" + data.docName.substr(1) + " doesn't exist");
+                }
+            }
+            else
+            {
+                console.log("WGCC_CloseDocument: Socket not ready.");
+            }
+        });
+
         socket.on("MX_UserVote", async(data) =>
         {
             if (socket.ready)
@@ -305,14 +348,35 @@ module.exports = () =>
         socket.on("requestSpectator", async(data) => 
         {
             const sessionExist = await strapi.query("session").findOne({ uuid: data.uuid });
-            if (sessionExist)
+            if (sessionExist && roomList.get(data.uuid))
             {
+                let gameLimitTimeMs;
+                if (sessionExist.currentStep <= STEP_PRINCIPAL_MISSION)
+                {
+                    gameLimitTimeMs = new Date(sessionExist.gameStartTime);
+                    gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P1_SECONDS);
+                }
+                else if (sessionExist.currentStep == STEP_FINAL_CHOOSE)
+                {
+                    gameLimitTimeMs = new Date(sessionExist.gameFinalTime);
+                    gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P2_SECONDS);
+                }
+
+                const gameMs = gameLimitTimeMs - new Date();
+                const gameSeconds = Math.floor((gameMs / 1000) % 60);
+                const gameMinutes = Math.floor((gameMs / 1000 / 60) % 60);
+                
+                const minutesStr = gameMinutes < 10 ? "0" + gameMinutes : gameMinutes;
+                const secondsStr = gameSeconds < 10 ? "0" + gameSeconds : gameSeconds;
+
                 socket.emit("spectatorInfo",
                 { 
                     isVersionA: sessionExist.isVersionA, 
-                    name: sessionExist.name, 
+                    name: sessionExist.name,
                     currentScene: sessionExist.currentScene, 
-                    currentStep: sessionExist.currentStep
+                    currentStep: sessionExist.currentStep,
+                    players: roomList.get(data.uuid).players,
+                    timer: minutesStr + ":" + secondsStr
                 });
             }
         });
@@ -445,6 +509,42 @@ module.exports = () =>
         {
             psckId: socketid,
             pseudo: pseudo,
+            docViewed: [
+                { name: "X0_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X0_1_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X0_1_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X0_1_2", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X0_1_3", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X1_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X1_1_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X1_2_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X1_3_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_2", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_3", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_4", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_5", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_6", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_0_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_0_2", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_0_3", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_2", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_3", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_4", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_5", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_2_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "XSound", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X4_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X4_1_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X4_1_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X4_1_2", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X5_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X5_0_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
+            ]
         }
 
         // Créer la room si elle n'existe pas
@@ -612,6 +712,18 @@ module.exports = () =>
                     io.to(room).emit("MX_VoteTimerUpdate", { seconds: voteSeconds });
                 }
             }
+
+            // Incremente le temps passé sur les documents vus
+            roomList.get(room).players.forEach(player =>
+            {
+                player.docViewed.forEach(doc =>
+                {
+                    if (doc.isOpen)
+                    {
+                        doc.timeViewed += 1;
+                    }
+                });
+            });
         });
     }, 1000);
 };
