@@ -350,24 +350,30 @@ module.exports = () =>
             const sessionExist = await strapi.query("session").findOne({ uuid: data.uuid });
             if (sessionExist && roomList.get(data.uuid))
             {
-                let gameLimitTimeMs;
-                if (sessionExist.currentStep <= STEP_PRINCIPAL_MISSION)
+                let timerStr = "-";
+                if (sessionExist.currentScene == SCENE_CHOOSECOMPANY)
                 {
-                    gameLimitTimeMs = new Date(sessionExist.gameStartTime);
-                    gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P1_SECONDS);
-                }
-                else if (sessionExist.currentStep == STEP_FINAL_CHOOSE)
-                {
-                    gameLimitTimeMs = new Date(sessionExist.gameFinalTime);
-                    gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P2_SECONDS);
-                }
+                    let gameLimitTimeMs;
+                    if (sessionExist.currentStep <= STEP_PRINCIPAL_MISSION)
+                    {
+                        gameLimitTimeMs = new Date(sessionExist.gameStartTime);
+                        gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P1_SECONDS);
+                    }
+                    else if (sessionExist.currentStep == STEP_FINAL_CHOOSE)
+                    {
+                        gameLimitTimeMs = new Date(sessionExist.gameFinalTime);
+                        gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P2_SECONDS);
+                    }
+    
+                    const gameMs = gameLimitTimeMs - new Date();
+                    const gameSeconds = Math.floor((gameMs / 1000) % 60);
+                    const gameMinutes = Math.floor((gameMs / 1000 / 60) % 60);
+                    
+                    const minutesStr = gameMinutes < 10 ? "0" + gameMinutes : gameMinutes;
+                    const secondsStr = gameSeconds < 10 ? "0" + gameSeconds : gameSeconds;
 
-                const gameMs = gameLimitTimeMs - new Date();
-                const gameSeconds = Math.floor((gameMs / 1000) % 60);
-                const gameMinutes = Math.floor((gameMs / 1000 / 60) % 60);
-                
-                const minutesStr = gameMinutes < 10 ? "0" + gameMinutes : gameMinutes;
-                const secondsStr = gameSeconds < 10 ? "0" + gameSeconds : gameSeconds;
+                    timerStr = minutesStr + ":" + secondsStr;
+                }
 
                 socket.emit("spectatorInfo",
                 { 
@@ -376,7 +382,7 @@ module.exports = () =>
                     currentScene: sessionExist.currentScene, 
                     currentStep: sessionExist.currentStep,
                     players: roomList.get(data.uuid).players,
-                    timer: minutesStr + ":" + secondsStr
+                    timer: timerStr
                 });
             }
         });
@@ -681,7 +687,7 @@ module.exports = () =>
                 }
                 else
                 {
-                    io.to(room).emit("UpdateTimerGame", { minutes: gameMinutes, seconds: gameSeconds });
+                    io.to(room).emit("UpdateTimerGame", { currentStep: values.currentStep, minutes: gameMinutes, seconds: gameSeconds });
                 }
             }
 
