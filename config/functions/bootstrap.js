@@ -14,7 +14,6 @@ module.exports = () =>
 {
     const GAME_DURATION_P1_SECONDS = 2400;
     const GAME_DURATION_P2_SECONDS = 90;
-    const BRAINTEASER_DURATION_SECONDS = 90;
     const VOTE_DURATION_SECONDS = 30;
 
     const SCENE_JOINROOM = 0;
@@ -26,9 +25,7 @@ module.exports = () =>
     const STEP_PASSWORD = 0;
     const STEP_CODE = 1;
     const STEP_PRINCIPAL_MISSION = 2;
-    const STEP_BRAINTEASER = 3;
-    const STEP_TRANSVERSAL_MISSION = 4;
-    const STEP_FINAL_CHOOSE = 5;
+    const STEP_FINAL_CHOOSE = 3;
 
     const NO_VOTE = "no-vote";
     const VOTE_AGREE = "vote-agree";
@@ -37,6 +34,7 @@ module.exports = () =>
     //********************************************************/
     // Sockets
     const roomList = new Map();
+    const roomSpectatorList = new Map();
     
     var io = require('socket.io')(strapi.server,
     {
@@ -134,6 +132,8 @@ module.exports = () =>
         {
             if (socket.ready)
             {
+                roomSpectatorList.get(socket.room).wgccData = data;
+
                 // Envoi a tout le monde sauf celui qui propose
                 socket.to(socket.room).emit('WGCC_CaptainShareInfo', data);
             }
@@ -191,10 +191,28 @@ module.exports = () =>
         {
             if (socket.ready)
             {
-                if ((data.questionId == 0 && data.answer == "tuesday") || 
-                    (data.questionId == 1 && data.answer == "4") ||
-                    (data.questionId == 2 && data.answer == "7") || 
-                    (data.questionId == 3 && data.answer == "10"))
+                if (    (socket.isVersionA && data.questionId == 0 && data.answer == "4") ||
+                        (socket.isVersionA && data.questionId == 1 && data.answer == "7") ||
+                        (socket.isVersionA && data.questionId == 2 && data.answer.includes("promise")) ||
+                        (socket.isVersionA && data.questionId == 3 && data.answer.includes("son")) ||
+                        (socket.isVersionA && data.questionId == 4 && data.answer == "its") ||
+                        (socket.isVersionA && data.questionId == 5 && data.answer == "one") ||
+                        (socket.isVersionA && data.questionId == 6 && data.answer == "short") ||
+                        (socket.isVersionA && data.questionId == 7 && data.answer == "u472bmt") ||
+                        (socket.isVersionA && data.questionId == 8 && data.answer == "4") ||
+                        (socket.isVersionA && data.questionId == 9 && data.answer == "21") ||
+
+                        (!socket.isVersionA && data.questionId == 0 && data.answer == "4") ||
+                        (!socket.isVersionA && data.questionId == 1 && data.answer == "8") ||
+                        (!socket.isVersionA && data.questionId == 2 && data.answer.includes("tea bag")) ||
+                        (!socket.isVersionA && data.questionId == 3 && data.answer == "incorrectly") ||
+                        (!socket.isVersionA && data.questionId == 4 && data.answer.includes("everest")) ||
+                        (!socket.isVersionA && data.questionId == 5 && data.answer == "s") ||
+                        (!socket.isVersionA && data.questionId == 6 && data.answer == "tuesday") ||
+                        (!socket.isVersionA && data.questionId == 7 && data.answer == "white") ||
+                        (!socket.isVersionA && data.questionId == 8 && data.answer == "20") ||
+                        (!socket.isVersionA && data.questionId == 9 && data.answer == "22")
+                )
                 {
                     io.to(socket.room).emit('WGCC_CaptainShareGoodBrainteaser');
                 }
@@ -245,7 +263,7 @@ module.exports = () =>
         {
             if (socket.ready)
             {                
-                var player = roomList.get(socket.room).players.find(p => p.psckId === socket.id);
+                var player = roomSpectatorList.get(socket.room).playersForSpectator.find(p => p.psckId === socket.id);
                 var docFound = player.docViewed.find(dv => dv.name === "X" + data.docName.substr(1));
                 if (docFound)
                 {
@@ -267,7 +285,7 @@ module.exports = () =>
         {
             if (socket.ready)
             {
-                var player = roomList.get(socket.room).players.find(p => p.psckId === socket.id);
+                var player = roomSpectatorList.get(socket.room).playersForSpectator.find(p => p.psckId === socket.id);
                 var docFound = player.docViewed.find(dv => dv.name === "X" + data.docName.substr(1));
                 if (docFound)
                 {
@@ -281,6 +299,27 @@ module.exports = () =>
             else
             {
                 console.log("WGCC_CloseDocument: Socket not ready.");
+            }
+        });
+
+        socket.on("WGCC_UnlockFolder", async(data) =>
+        {
+            if (socket.ready)
+            {
+                var player = roomSpectatorList.get(socket.room).playersForSpectator.find(p => p.psckId === socket.id);
+                var docFound = player.docViewed.find(dv => dv.name === "X" + data.docName.substr(1));
+                if (docFound)
+                {
+                    docFound.isOpen = false;
+                }
+                else
+                {
+                    console.log("Doc: " + "X" + data.docName.substr(1) + " doesn't exist");
+                }
+            }
+            else
+            {
+                console.log("WGCC_UnlockFolder: Socket not ready.");
             }
         });
 
@@ -381,7 +420,7 @@ module.exports = () =>
                     name: sessionExist.name,
                     currentScene: sessionExist.currentScene, 
                     currentStep: sessionExist.currentStep,
-                    players: roomList.get(data.uuid).players,
+                    roomSpectatorInfo: roomSpectatorList.get(data.uuid),
                     timer: timerStr
                 });
             }
@@ -471,6 +510,8 @@ module.exports = () =>
                     roomList.get(room).gameStartTime = sessionUpdated.gameStartTime;
                     roomList.get(room).currentScene = sessionUpdated.currentScene;
                     roomList.get(room).currentCaptain = roomList.get(room).currentVote.voteData;
+                    roomSpectatorList.get(room).captainForSpectator = roomList.get(room).currentCaptain;
+
                     io.to(room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
                 }
                 // SCENE_CHOOSECOMPANY
@@ -515,48 +556,62 @@ module.exports = () =>
         {
             psckId: socketid,
             pseudo: pseudo,
+        }
+
+        const newPlayerForSpectator =
+        {
+            psckId: socketid,
+            pseudo: pseudo,
+            hasDisconnect: false,
             docViewed: [
-                { name: "X0_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X0_1_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X0_1_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X0_1_2", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X0_1_3", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X1_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X1_1_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X1_2_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X1_3_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X2_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X2_0_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X2_0_2", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X2_0_3", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X2_0_4", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X2_0_5", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X2_0_6", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X3_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X3_0_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X3_0_2", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X3_0_3", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X3_1_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X3_1_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X3_1_2", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X3_1_3", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X3_1_4", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X3_1_5", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X3_2_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "XSound", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X4_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X4_1_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X4_1_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X4_1_2", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X5_0_0", isOpen: false, nbOpen: 0, timeViewed: 0 },
-                { name: "X5_0_1", isOpen: false, nbOpen: 0, timeViewed: 0 },
-            ]
+                { name: "X0_0_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X0_1_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X0_1_1", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X0_1_2", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X0_1_3", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X1_0_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X1_1_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X1_2_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X1_3_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_1", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_2", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_3", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_4", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_5", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X2_0_6", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_0_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_0_1", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_0_2", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_0_3", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_1", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_2", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_3", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_4", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_1_5", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X3_2_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "XSound", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X4_0_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X4_1_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X4_1_1", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X4_1_2", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X5_0_0", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+                { name: "X5_0_1", isLock: true, isOpen: false, nbOpen: 0, timeViewed: 0 },
+            ],
+            menuTimeViewed: 0
         }
 
         // Créer la room si elle n'existe pas
         if (!roomList.has(room))
         {
             console.log(pseudo + " createdRoom: " + room);
+
+            roomSpectatorList.set(room, {
+                captainForSpectator: null,
+                playersForSpectator: [],
+                wgccData: {},
+            });
 
             roomList.set(room, { 
                 isVersionA: isVA,
@@ -572,6 +627,7 @@ module.exports = () =>
             // Si la room existant
             if (currentScene >= SCENE_CHOOSECOMPANY)
             {
+                roomSpectatorList.get(room).captainForSpectator= newPlayer;
                 roomList.get(room).currentCaptain = newPlayer;
             }
         }
@@ -581,6 +637,7 @@ module.exports = () =>
         }
         
         // Ajoute le nouveau user à la room
+        roomSpectatorList.get(room).playersForSpectator.push(newPlayerForSpectator);
         roomList.get(room).players.push(newPlayer);
         shareConnectedPlayers(room);
     }
@@ -605,6 +662,7 @@ module.exports = () =>
             console.log("DeleteRoom: " + room);
 
             // Détruit la room si il n'y a plus d'utilisateur dedans
+            roomSpectatorList.delete(room);
             roomList.delete(room);
         }
         else
@@ -615,10 +673,19 @@ module.exports = () =>
             if (roomList.get(room).currentCaptain !== null && roomList.get(room).currentCaptain.psckId === socketId)
             {
                 roomList.get(room).currentCaptain = playerList[0];
+                roomSpectatorList.get(room).captainForSpectator = playerList[0];
+
                 playerList.forEach(p =>
                 {
                     shareCurrentCaptain(room, p.psckId);
                 });
+            }
+
+            // Met a jour le status du joueur pour le mode spectateur
+            let playerSpectatorFound = roomSpectatorList.get(room).playersForSpectator.find(u => u.psckId !== socketId);
+            if (playerSpectatorFound)
+            {
+                playerSpectatorFound.hasDisconnect = true;
             }
 
             // Met a jour la room avec l'utilisateur ayant quitté en moins
@@ -719,17 +786,29 @@ module.exports = () =>
                 }
             }
 
-            // Incremente le temps passé sur les documents vus
-            roomList.get(room).players.forEach(player =>
+            // Incremente le temps passé sur les documents vus ou sur le menu à défaut
+            if (values.currentScene == SCENE_CHOOSECOMPANY)
             {
-                player.docViewed.forEach(doc =>
+                roomSpectatorList.get(room).playersForSpectator.forEach(player =>
                 {
-                    if (doc.isOpen)
+                    if (!player.hasDisconnect)
                     {
-                        doc.timeViewed += 1;
+                        let isInMenu = true;
+                        player.docViewed.forEach(doc =>
+                        {
+                            if (doc.isOpen)
+                            {
+                                isInMenu = false;
+                                doc.timeViewed += 1;
+                            }
+                        });
+                        if (isInMenu)
+                        {
+                            player.menuTimeViewed += 1;
+                        }
                     }
                 });
-            });
+            }
         });
     }, 1000);
 };
