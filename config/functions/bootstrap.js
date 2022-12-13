@@ -116,11 +116,8 @@ module.exports = () =>
             if (socket.ready)
             {
                 // Clean les votes et sauvegarde le vote du joueur qui propose
-                startNewVote(socket.room, data.captain);
-                userVote(socket.room, socket.id, true);
-    
-                // Envoi a tout le monde sauf celui qui propose
-                socket.to(socket.room).emit('WGVC_ShareVote', data);
+                if (roomList.get(socket.room).currentVote === null) startNewVote(socket.room, null);
+                userVote(socket.room, socket.id, data.captain);
             }
             else
             {
@@ -184,6 +181,19 @@ module.exports = () =>
             else
             {
                 console.log("WGVC_Propose: Socket not ready.");
+            }
+        });
+
+        socket.on("WGCC_CaptainAutoInformBrainteaserId", async(data) =>
+        {
+            if (socket.ready)
+            {
+                console.log("WGCC_CaptainAutoInformBrainteaserId: " + data.questionId);
+                io.to(socket.room).emit('WGCC_CaptainShareBrainteaserId', { questionId: data.questionId });
+            }
+            else
+            {
+                console.log("WGCC_CaptainProposeBrainteaser: Socket not ready.");
             }
         });
 
@@ -307,14 +317,57 @@ module.exports = () =>
             if (socket.ready)
             {
                 var player = roomSpectatorList.get(socket.room).playersForSpectator.find(p => p.psckId === socket.id);
-                var docFound = player.docViewed.find(dv => dv.name === "X" + data.docName.substr(1));
-                if (docFound)
+                if (data.folderUnlock === 0)
                 {
-                    docFound.isOpen = false;
+                    player.docViewed.find(dv => dv.name === "X0_0_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X0_1_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X0_1_1").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X0_1_2").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X0_1_3").isLock = false;
                 }
-                else
+                else if (data.folderUnlock === 1)
                 {
-                    console.log("Doc: " + "X" + data.docName.substr(1) + " doesn't exist");
+                    player.docViewed.find(dv => dv.name === "X1_0_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X1_1_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X1_2_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X1_3_0").isLock = false;
+                }
+                else if (data.folderUnlock === 2)
+                {
+                    player.docViewed.find(dv => dv.name === "X2_0_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X2_0_1").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X2_0_2").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X2_0_3").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X2_0_4").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X2_0_5").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X2_0_6").isLock = false;
+                }
+                else if (data.folderUnlock === 3)
+                {
+                    player.docViewed.find(dv => dv.name === "X3_0_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X3_0_1").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X3_0_2").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X3_0_3").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X3_1_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X3_1_1").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X3_1_2").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X3_1_3").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X3_1_4").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X3_1_5").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X3_2_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "XSound").isLock = false;
+                }
+                else if (data.folderUnlock === 4)
+                {
+                    player.docViewed.find(dv => dv.name === "X4_0_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X4_1_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X4_1_1").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X4_1_2").isLock = false;
+                }
+                else if (data.folderUnlock === 5)
+                {
+                    player.docViewed.find(dv => dv.name === "X5_0_0").isLock = false;
+                    player.docViewed.find(dv => dv.name === "X5_0_1").isLock = false;
                 }
             }
             else
@@ -414,7 +467,7 @@ module.exports = () =>
                     timerStr = minutesStr + ":" + secondsStr;
                 }
 
-                socket.emit("spectatorInfo",
+                const json = 
                 { 
                     isVersionA: sessionExist.isVersionA, 
                     name: sessionExist.name,
@@ -422,7 +475,17 @@ module.exports = () =>
                     currentStep: sessionExist.currentStep,
                     roomSpectatorInfo: roomSpectatorList.get(data.uuid),
                     timer: timerStr
-                });
+                };
+                socket.emit("spectatorInfo", json);
+
+                if (sessionExist.currentScene != SCENE_CONGRATULATION)
+                {
+                    strapi.query("session").update({ uuid: data.uuid }, { spectatorInfo: json });
+                }
+            }
+            else if (sessionExist && sessionExist.currentScene == SCENE_CONGRATULATION)
+            {
+                socket.emit("spectatorInfo", sessionExist.spectatorInfo);
             }
         });
 
@@ -460,12 +523,23 @@ module.exports = () =>
     }
 
     // Enregistre le vote d'un joueur
-    function userVote(room, sockId, userAgree)
+    function userVote(room, sockId, userResponse)
     {
         let userVote = roomList.get(room).currentVote.userVotes.find(p => p.player.psckId === sockId);
         if (userVote !== undefined)
         {
-            userVote.vote = userAgree ? VOTE_AGREE : VOTE_DISAGREE;
+            if (userResponse === true)
+            {
+                userVote.vote = VOTE_AGREE;
+            }
+            else if (userResponse === false)
+            {
+                userVote.vote = VOTE_DISAGREE;
+            }
+            else
+            {
+                userVote.vote = userResponse
+            }
 
             // Vérifie le vote
             checkVote(room);
@@ -487,6 +561,7 @@ module.exports = () =>
             if (userVote.vote === NO_VOTE)              voteNull++;
             else if (userVote.vote === VOTE_AGREE)      voteAgree++;
             else if (userVote.vote === VOTE_DISAGREE)   voteDisagree++;
+            else                                        voteAgree++;
         });
 
         // Vérifie si le vote est terminé
@@ -507,10 +582,30 @@ module.exports = () =>
                 {
                     let sessionUpdated = await strapi.query("session").update({ uuid: room }, { currentScene: SCENE_CHOOSECOMPANY, gameStartTime: new Date() });
                     
+                    let userMostVote = null;
+                    let userNbMaxVote = 0;
+                    let playerNbVote = 0;
+                    roomList.get(room).players.forEach(p =>
+                    {
+                        playerNbVote = 0;
+                        roomList.get(room).currentVote.userVotes.forEach(uv => {
+                            if (p.psckId === uv.vote.psckId)
+                            {
+                                playerNbVote++;
+                            }
+                        });
+                        if (playerNbVote > userNbMaxVote)
+                        {
+                            userMostVote = p;
+                            userNbMaxVote = playerNbVote;
+                        }
+                    });
+                    
                     roomList.get(room).gameStartTime = sessionUpdated.gameStartTime;
                     roomList.get(room).currentScene = sessionUpdated.currentScene;
-                    roomList.get(room).currentCaptain = roomList.get(room).currentVote.voteData;
+                    roomList.get(room).currentCaptain = userMostVote;
                     roomSpectatorList.get(room).captainForSpectator = roomList.get(room).currentCaptain;
+                    roomSpectatorList.get(room).captainVoteFinal = roomList.get(room).currentVote.userVotes;
 
                     io.to(room).emit('WG_NextScene', { nextScene: sessionUpdated.currentScene });
                 }
@@ -608,6 +703,7 @@ module.exports = () =>
             console.log(pseudo + " createdRoom: " + room);
 
             roomSpectatorList.set(room, {
+                captainVoteFinal: null,
                 captainForSpectator: null,
                 playersForSpectator: [],
                 wgccData: {},
@@ -773,7 +869,7 @@ module.exports = () =>
                     {
                         if (userVotes[i].vote === NO_VOTE)
                         {
-                            userVotes[i].vote = VOTE_AGREE;
+                            userVotes[i].vote = VOTE_DISAGREE;
                         }
                     };
                     roomList.get(room).currentVote.userVotes = userVotes;
