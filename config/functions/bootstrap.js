@@ -15,6 +15,7 @@ module.exports = () =>
     const GAME_DURATION_P1_SECONDS = 2400;
     const GAME_DURATION_P2_SECONDS = 90;
     const VOTE_DURATION_SECONDS = 30;
+    const BRAINTEASER_EXTRA_TIME = 30;
 
     const SCENE_JOINROOM = 0;
     const SCENE_READMISSION = 1;
@@ -40,7 +41,7 @@ module.exports = () =>
     {
         cors:
         {
-            origin: "https://www.jeuwaterair50ans.fr/api",
+            origin: "https://escapegame-concours-ig.com/api",
             methods: ["GET", "POST"],
             allowedHeaders: ["my-custom-header"],
             credentials: true
@@ -201,6 +202,8 @@ module.exports = () =>
         {
             if (socket.ready)
             {
+                console.log(socket.isVersionA, " .... ", data.questionId, " ... ", data.answer);
+
                 if (    (socket.isVersionA && data.questionId == 0 && data.answer == "4") ||
                         (socket.isVersionA && data.questionId == 1 && data.answer == "7") ||
                         (socket.isVersionA && data.questionId == 2 && data.answer.includes("promise")) ||
@@ -224,10 +227,12 @@ module.exports = () =>
                         (!socket.isVersionA && data.questionId == 9 && data.answer == "22")
                 )
                 {
+                    roomList.get(socket.room).gameExtraTime += BRAINTEASER_EXTRA_TIME;
                     io.to(socket.room).emit('WGCC_CaptainShareGoodBrainteaser');
                 }
                 else
                 {
+                    roomList.get(socket.room).gameExtraTime -= BRAINTEASER_EXTRA_TIME;
                     io.to(socket.room).emit('WGCC_CaptainShareBadBrainteaser');
                 }
             }
@@ -448,8 +453,9 @@ module.exports = () =>
                     let gameLimitTimeMs;
                     if (sessionExist.currentStep <= STEP_PRINCIPAL_MISSION)
                     {
+                        console.log("ExtraTime: ", roomList.get(data.uuid).gameExtraTime);
                         gameLimitTimeMs = new Date(sessionExist.gameStartTime);
-                        gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P1_SECONDS);
+                        gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P1_SECONDS + roomList.get(data.uuid).gameExtraTime);
                     }
                     else if (sessionExist.currentStep == STEP_FINAL_CHOOSE)
                     {
@@ -546,7 +552,7 @@ module.exports = () =>
         }
         else
         {
-            console.log("UserNotFoundInVote: ", user);
+            console.log("UserNotFoundInVote: ", sockId);
         }
     }
 
@@ -717,13 +723,14 @@ module.exports = () =>
                 currentCaptain: null,
                 currentVote: null,
                 gameStartTime: sessionStartTime,
-                gameFinalTime: sessionFinalTime
+                gameFinalTime: sessionFinalTime,
+                gameExtraTime: 0
             });
 
             // Si la room existant
             if (currentScene >= SCENE_CHOOSECOMPANY)
             {
-                roomSpectatorList.get(room).captainForSpectator= newPlayer;
+                roomSpectatorList.get(room).captainForSpectator = newPlayer;
                 roomList.get(room).currentCaptain = newPlayer;
             }
         }
@@ -816,8 +823,9 @@ module.exports = () =>
                 let gameLimitTimeMs;
                 if (values.currentStep <= STEP_PRINCIPAL_MISSION)
                 {
+                    console.log(values.gameExtraTime);
                     gameLimitTimeMs = new Date(values.gameStartTime);
-                    gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P1_SECONDS);
+                    gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P1_SECONDS + values.gameExtraTime);
                 }
                 else if (values.currentStep == STEP_FINAL_CHOOSE)
                 {
@@ -825,6 +833,7 @@ module.exports = () =>
                     gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P2_SECONDS);
                 }
 
+                // EXTRATIME
                 const gameMs = gameLimitTimeMs - new Date();
                 const gameSeconds = Math.floor((gameMs / 1000) % 60);
                 const gameMinutes = Math.floor((gameMs / 1000 / 60) % 60);
