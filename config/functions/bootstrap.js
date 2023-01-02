@@ -189,7 +189,6 @@ module.exports = () =>
         {
             if (socket.ready)
             {
-                console.log("WGCC_CaptainAutoInformBrainteaserId: " + data.questionId);
                 io.to(socket.room).emit('WGCC_CaptainShareBrainteaserId', { questionId: data.questionId });
             }
             else
@@ -202,8 +201,6 @@ module.exports = () =>
         {
             if (socket.ready)
             {
-                console.log(socket.isVersionA, " .... ", data.questionId, " ... ", data.answer);
-
                 if (    (socket.isVersionA && data.questionId == 0 && data.answer == "4") ||
                         (socket.isVersionA && data.questionId == 1 && data.answer == "7") ||
                         (socket.isVersionA && data.questionId == 2 && data.answer.includes("promise")) ||
@@ -445,53 +442,19 @@ module.exports = () =>
         socket.on("requestSpectator", async(data) => 
         {
             const sessionExist = await strapi.query("session").findOne({ uuid: data.uuid });
-            if (sessionExist && roomList.get(data.uuid))
+            if (sessionExist)
             {
-                let timerStr = "-";
-                if (sessionExist.currentScene == SCENE_CHOOSECOMPANY)
+                if (roomList.get(data.uuid) && sessionExist.currentScene !== SCENE_CONGRATULATION)
                 {
-                    let gameLimitTimeMs;
-                    if (sessionExist.currentStep <= STEP_PRINCIPAL_MISSION)
+                    getJsonGameData(data.uuid).then((json) =>
                     {
-                        console.log("ExtraTime: ", roomList.get(data.uuid).gameExtraTime);
-                        gameLimitTimeMs = new Date(sessionExist.gameStartTime);
-                        gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P1_SECONDS + roomList.get(data.uuid).gameExtraTime);
-                    }
-                    else if (sessionExist.currentStep == STEP_FINAL_CHOOSE)
-                    {
-                        gameLimitTimeMs = new Date(sessionExist.gameFinalTime);
-                        gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P2_SECONDS);
-                    }
-    
-                    const gameMs = gameLimitTimeMs - new Date();
-                    const gameSeconds = Math.floor((gameMs / 1000) % 60);
-                    const gameMinutes = Math.floor((gameMs / 1000 / 60) % 60);
-                    
-                    const minutesStr = gameMinutes < 10 ? "0" + gameMinutes : gameMinutes;
-                    const secondsStr = gameSeconds < 10 ? "0" + gameSeconds : gameSeconds;
-
-                    timerStr = minutesStr + ":" + secondsStr;
+                        if (json) socket.emit("spectatorInfo", json);
+                    });
                 }
-
-                const json = 
-                { 
-                    isVersionA: sessionExist.isVersionA, 
-                    name: sessionExist.name,
-                    currentScene: sessionExist.currentScene, 
-                    currentStep: sessionExist.currentStep,
-                    roomSpectatorInfo: roomSpectatorList.get(data.uuid),
-                    timer: timerStr
-                };
-                socket.emit("spectatorInfo", json);
-
-                if (sessionExist.currentScene != SCENE_CONGRATULATION)
+                else
                 {
-                    strapi.query("session").update({ uuid: data.uuid }, { spectatorInfo: json });
+                    socket.emit("spectatorInfo", sessionExist.spectatorInfo);
                 }
-            }
-            else if (sessionExist && sessionExist.currentScene == SCENE_CONGRATULATION)
-            {
-                socket.emit("spectatorInfo", sessionExist.spectatorInfo);
             }
         });
 
@@ -759,6 +722,7 @@ module.exports = () =>
 
         // User quitte la room
         let playerList = roomList.get(room).players;
+        let playerLeft = roomList.get(room).players.find(u => u.psckId === socketId);
         playerList = playerList.filter(u => u.psckId !== socketId);
         if (playerList.length == 0)
         {
@@ -770,7 +734,7 @@ module.exports = () =>
         }
         else
         {
-            console.log(socketId + " leftRoom: " + room + ". PlayersRemaining: " + playerList);
+            console.log(playerLeft.pseudo + " leftRoom: " + room + ". PlayersRemaining: " + playerList.map((p) => { return p.pseudo }));
 
             // Si le captain a quitté, on sélectionne le captain suivant (premier joueur de la liste)
             if (roomList.get(room).currentCaptain !== null && roomList.get(room).currentCaptain.psckId === socketId)
@@ -785,7 +749,7 @@ module.exports = () =>
             }
 
             // Met a jour le status du joueur pour le mode spectateur
-            let playerSpectatorFound = roomSpectatorList.get(room).playersForSpectator.find(u => u.psckId !== socketId);
+            let playerSpectatorFound = roomSpectatorList.get(room).playersForSpectator.find(u => u.psckId === socketId);
             if (playerSpectatorFound)
             {
                 playerSpectatorFound.hasDisconnect = true;
@@ -811,6 +775,53 @@ module.exports = () =>
         io.to(socketId).emit('currentCaptain', { captain: roomList.get(room).currentCaptain, youAreCaptain: yac });
     }
 
+    async function getJsonGameData(room)
+    {
+        const sessionExist = await strapi.query("session").findOne({ uuid: room });
+        if (sessionExist && roomList.get(room))
+        {
+            let timerStr = "-";
+            if (sessionExist.currentScene == SCENE_CHOOSECOMPANY)
+            {
+                let gameLimitTimeMs;
+                if (sessionExist.currentStep <= STEP_PRINCIPAL_MISSION)
+                {
+                    gameLimitTimeMs = new Date(sessionExist.gameStartTime);
+                    gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P1_SECONDS + roomList.get(room).gameExtraTime);
+                }
+                else if (sessionExist.currentStep == STEP_FINAL_CHOOSE)
+                {
+                    gameLimitTimeMs = new Date(sessionExist.gameFinalTime);
+                    gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P2_SECONDS);
+                }
+
+                const gameMs = gameLimitTimeMs - new Date();
+                const gameSeconds = Math.floor((gameMs / 1000) % 60);
+                const gameMinutes = Math.floor((gameMs / 1000 / 60) % 60);
+                
+                const minutesStr = gameMinutes < 10 ? "0" + gameMinutes : gameMinutes;
+                const secondsStr = gameSeconds < 10 ? "0" + gameSeconds : gameSeconds;
+
+                timerStr = minutesStr + ":" + secondsStr;
+            }
+
+            const json = 
+            { 
+                isVersionA: sessionExist.isVersionA, 
+                name: sessionExist.name,
+                currentScene: sessionExist.currentScene, 
+                currentStep: sessionExist.currentStep,
+                roomSpectatorInfo: roomSpectatorList.get(room),
+                timer: timerStr
+            };
+            return json;
+        }
+        else
+        {
+            return null;
+        }
+    }
+
     //********************************************************/
     // Timers
     setInterval(function()
@@ -823,7 +834,6 @@ module.exports = () =>
                 let gameLimitTimeMs;
                 if (values.currentStep <= STEP_PRINCIPAL_MISSION)
                 {
-                    console.log(values.gameExtraTime);
                     gameLimitTimeMs = new Date(values.gameStartTime);
                     gameLimitTimeMs.setSeconds(gameLimitTimeMs.getSeconds() + GAME_DURATION_P1_SECONDS + values.gameExtraTime);
                 }
@@ -916,4 +926,18 @@ module.exports = () =>
             }
         });
     }, 1000);
+
+    setInterval(function()
+    {
+        roomList.forEach(async(values, room) =>
+        {
+            getJsonGameData(room).then((json) =>
+            {
+                if (json && json.currentScene != SCENE_CONGRATULATION)
+                {
+                    strapi.query("session").update({ uuid: room }, { spectatorInfo: json });
+                }
+            });
+        });
+    }, 5000);
 };
