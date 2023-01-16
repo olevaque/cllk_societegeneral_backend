@@ -933,11 +933,11 @@ module.exports = () =>
         {
             getJsonGameData(room).then((json) =>
             {
-                if (json && json.currentScene != SCENE_CONGRATULATION)
+                if (json)
                 {
                     strapi.query("session").update({ uuid: room }, { spectatorInfo: json });
                 }
             });
         });
-    }, 5000);
+    }, 4000);
 };
